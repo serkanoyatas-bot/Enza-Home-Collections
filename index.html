@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Çalışan Otomatik PDF Flipbook</title>
+    <title>Garantili PDF Flipbook</title>
     
-    <!-- En kararlı ve güncel CDN linkleri -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/4.1.0/turn.min.js"></script>
+    <script src="https://unpkg.com/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
     <style>
@@ -17,19 +15,22 @@
             display: flex; flex-direction: column;
             justify-content: center; align-items: center;
             height: 100vh; font-family: sans-serif;
+            overflow: hidden;
         }
         #loading {
-            color: #fff; font-size: 18px; font-weight: bold;
+            color: #fff; font-size: 18px; margin-bottom: 20px;
         }
-        #flipbook {
+        /* Alt alta gelmeyi engelleyen kritik kapsayıcı alan */
+        .container {
             width: 1000px;
             height: 600px;
-            visibility: hidden; /* Sayfalar çizilene kadar parlamayı önler */
+            display: none; /* Yüklenene kadar gizle */
         }
         .page {
             width: 500px;
             height: 600px;
             background-color: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
         canvas {
             width: 100%;
@@ -39,17 +40,16 @@
 </head>
 <body>
 
-    <div id="loading">Please wait.. It will be ready soon..</div>
-    <div id="flipbook"></div>
+    <div id="loading">PDF Sayfaları Hazırlanıyor...</div>
+    <div id="flipbook" class="container"></div>
 
     <script>
-        // BURAYA PDF DOSYANIN ADINI UZANTISIYLA YAZ (Örn: rapor.pdf)
+        // PDF DOSYANIN ADINI KONTROL ET
         const pdfUrl = 'Enza Home Collections.pdf'; 
 
-        // PDF.js Worker'ı harici link yerine doğrudan ana kütüphaneden bağlıyoruz (Güvenlik hatasını çözer)
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-        async function initFlipbook() {
+        async function startBook() {
             try {
                 const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
                 const flipbook = document.getElementById('flipbook');
@@ -57,14 +57,13 @@
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     const page = await pdf.getPage(pageNum);
                     
-                    // Sayfa için kapsayıcı bir div oluşturuyoruz (Turn.js'in sağlıklı çalışması için şart)
                     const pageDiv = document.createElement('div');
                     pageDiv.className = 'page';
                     
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
                     
-                    // Yüksek kalite için scale değerini ayarlıyoruz
+                    // Net bir görüntü için 1.5x scale
                     const viewport = page.getViewport({ scale: 1.5 });
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
@@ -75,32 +74,30 @@
                     await page.render({ canvasContext: context, viewport: viewport }).promise;
                 }
 
-                // Yükleme ekranını gizle ve kitabı aç
+                // Sayfalar oluştuktan sonra yükleme yazısını kaldır ve göster
                 document.getElementById('loading').style.display = 'none';
-                flipbook.style.visibility = 'visible';
+                flipbook.style.display = 'block';
 
-                // Turn.js efektini başlat
-                $('#flipbook').turn({
-                    width: 1000,
+                // Yeni nesil Page-Flip motorunu tetikle (jQuery bağımlılığı yoktur)
+                const pageFlip = new St.PageFlip(flipbook, {
+                    width: 500,
                     height: 600,
-                    autoCenter: true,
-                    acceleration: true, // Donmaları engeller
-                    gradients: true, // Sayfa gölgelerini açar
-                    when: {
-                        turning: function(event, page, pageObject) {
-                            // Sayfa çevrilirken tetiklenecek animasyon ayarı
-                        }
-                    }
+                    size: "fixed",
+                    minWidth: 300, maxWidth: 1000,
+                    minHeight: 400, maxHeight: 1200,
+                    drawShadow: true,
+                    showCover: true
                 });
 
+                pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+
             } catch (error) {
-                document.getElementById('loading').innerText = "Hata oluştu: " + error.message;
+                document.getElementById('loading').innerText = "Hata: " + error.message;
                 console.error(error);
             }
         }
 
-        // Sayfa tamamen yüklendiğinde sistemi çalıştır
-        window.onload = initFlipbook;
+        window.onload = startBook;
     </script>
 </body>
 </html>
