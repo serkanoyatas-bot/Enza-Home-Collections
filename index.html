@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Garantili PDF Flipbook</title>
+    <title>Kararlı PDF Flipbook</title>
     
-    <script src="https://unpkg.com/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
+    <!-- Sadece PDF okuyucu kütüphane gerekli -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
     <style>
@@ -16,32 +16,62 @@
             justify-content: center; align-items: center;
             height: 100vh; font-family: sans-serif;
             overflow: hidden;
+            perspective: 1500px; /* 3D derinlik efekti için şart */
         }
-        #loading {
-            color: #fff; font-size: 18px; margin-bottom: 20px;
-        }
-        /* Alt alta gelmeyi engelleyen kritik kapsayıcı alan */
-        .container {
-            width: 1000px;
+        #loading { color: #fff; font-size: 18px; margin-bottom: 20px; }
+        
+        /* Kitap Alanı */
+        .book {
+            position: relative;
+            width: 450px; /* Tek sayfa genişliği */
             height: 600px;
-            display: none; /* Yüklenene kadar gizle */
+            display: none;
+            transform-style: preserve-3d;
+            transition: transform 0.5s;
         }
+        
+        /* Her Bir Sayfanın Yapısı */
         .page {
-            width: 500px;
-            height: 600px;
-            background-color: white;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            position: absolute;
+            width: 100%; height: 100%;
+            top: 0; left: 0;
+            transform-origin: left center; /* Sayfa soldan açılacak */
+            transform-style: preserve-3d;
+            transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+            cursor: pointer;
+            backface-visibility: hidden; /* Sayfanın arkası dönünce gizlensin */
         }
+        
         canvas {
-            width: 100%;
-            height: 100%;
+            width: 100%; height: 100%;
+            background: white;
+            box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+            display: block;
+        }
+
+        /* Çevrilen sayfaların alacağı 3D pozisyon */
+        .page.flipped {
+            transform: rotateY(-180deg);
+        }
+        
+        /* Kontrol Butonları */
+        .buttons { margin-top: 20px; z-index: 10; }
+        button {
+            padding: 10px 20px; font-size: 16px; cursor: pointer;
+            background: #fff; border: none; border-radius: 5px; margin: 0 5px;
         }
     </style>
 </head>
 <body>
 
-    <div id="loading">PDF Sayfaları Hazırlanıyor...</div>
-    <div id="flipbook" class="container"></div>
+    <div id="loading">Please wait.. It's loading..</div>
+    
+    <div id="book" class="book"></div>
+
+    <div class="buttons">
+        <button id="prevBtn">Previous</button>
+        <button id="nextBtn">Next</button>
+    </div>
 
     <script>
         // PDF DOSYANIN ADINI KONTROL ET
@@ -49,55 +79,81 @@
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-        async function startBook() {
+        let currentId = 0;
+        let pages = [];
+
+        async function createFlipbook() {
             try {
                 const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
-                const flipbook = document.getElementById('flipbook');
+                const book = document.getElementById('book');
 
+                // PDF Sayfalarını sırayla DOM'a ekliyoruz
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     const page = await pdf.getPage(pageNum);
                     
                     const pageDiv = document.createElement('div');
                     pageDiv.className = 'page';
+                    // Z-index ayarı: İlk sayfalar üstte durmalı
+                    pageDiv.style.zIndex = pdf.numPages - pageNum; 
                     
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
                     
-                    // Net bir görüntü için 1.5x scale
                     const viewport = page.getViewport({ scale: 1.5 });
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
 
                     pageDiv.appendChild(canvas);
-                    flipbook.appendChild(pageDiv);
+                    book.appendChild(pageDiv);
 
                     await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    pages.push(pageDiv);
                 }
 
-                // Sayfalar oluştuktan sonra yükleme yazısını kaldır ve göster
+                // Yükleme bitti, kitabı göster
                 document.getElementById('loading').style.display = 'none';
-                flipbook.style.display = 'block';
+                book.style.display = 'block';
 
-                // Yeni nesil Page-Flip motorunu tetikle (jQuery bağımlılığı yoktur)
-                const pageFlip = new St.PageFlip(flipbook, {
-                    width: 500,
-                    height: 600,
-                    size: "fixed",
-                    minWidth: 300, maxWidth: 1000,
-                    minHeight: 400, maxHeight: 1200,
-                    drawShadow: true,
-                    showCover: true
+                // Sayfa Tıklama İle Çevirme Etkinliği
+                pages.forEach((page, index) => {
+                    page.addEventListener('click', () => {
+                        if (index === currentId) {
+                            // İleri çevir
+                            page.classList.add('flipped');
+                            page.style.zIndex = index;
+                            currentId++;
+                        } else if (index === currentId - 1) {
+                            // Geri çevir
+                            page.classList.remove('flipped');
+                            page.style.zIndex = pages.length - index;
+                            currentId--;
+                        }
+                    });
                 });
 
-                pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+                // Buton Kontrolleri
+                document.getElementById('nextBtn').addEventListener('click', () => {
+                    if (currentId < pages.length) {
+                        pages[currentId].classList.add('flipped');
+                        pages[currentId].style.zIndex = currentId;
+                        currentId++;
+                    }
+                });
+
+                document.getElementById('prevBtn').addEventListener('click', () => {
+                    if (currentId > 0) {
+                        currentId--;
+                        pages[currentId].classList.remove('flipped');
+                        pages[currentId].style.zIndex = pages.length - currentId;
+                    }
+                });
 
             } catch (error) {
                 document.getElementById('loading').innerText = "Hata: " + error.message;
-                console.error(error);
             }
         }
 
-        window.onload = startBook;
+        window.onload = createFlipbook;
     </script>
 </body>
 </html>
