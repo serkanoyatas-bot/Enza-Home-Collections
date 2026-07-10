@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kararlı PDF Flipbook</title>
+    <title>Hızlı 16:9 PDF Flipbook (İlk 5 Sayfa Öncelikli)</title>
     
-    <!-- Sadece PDF okuyucu kütüphane gerekli -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
     <style>
@@ -16,144 +15,154 @@
             justify-content: center; align-items: center;
             height: 100vh; font-family: sans-serif;
             overflow: hidden;
-            perspective: 1500px; /* 3D derinlik efekti için şart */
+            perspective: 2000px;
         }
-        #loading { color: #fff; font-size: 18px; margin-bottom: 20px; }
         
-        /* Kitap Alanı */
+        #loading { 
+            color: #fff; font-size: 16px; font-weight: bold; margin-bottom: 20px; 
+        }
+        
         .book {
             position: relative;
-            width: 450px; /* Tek sayfa genişliği */
-            height: 600px;
+            width: 880px;  
+            height: 495px; 
             display: none;
             transform-style: preserve-3d;
             transition: transform 0.5s;
         }
         
-        /* Her Bir Sayfanın Yapısı */
         .page {
             position: absolute;
             width: 100%; height: 100%;
             top: 0; left: 0;
-            transform-origin: left center; /* Sayfa soldan açılacak */
+            transform-origin: left center;
             transform-style: preserve-3d;
             transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
             cursor: pointer;
-            backface-visibility: hidden; /* Sayfanın arkası dönünce gizlensin */
+            backface-visibility: hidden;
         }
         
         canvas {
             width: 100%; height: 100%;
             background: white;
-            box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+            box-shadow: 4px 0 15px rgba(0,0,0,0.4);
             display: block;
+            border-radius: 4px;
         }
 
-        /* Çevrilen sayfaların alacağı 3D pozisyon */
         .page.flipped {
             transform: rotateY(-180deg);
         }
         
-        /* Kontrol Butonları */
-        .buttons { margin-top: 20px; z-index: 10; }
+        .buttons { margin-top: 30px; z-index: 10; }
         button {
-            padding: 10px 20px; font-size: 16px; cursor: pointer;
-            background: #fff; border: none; border-radius: 5px; margin: 0 5px;
+            padding: 12px 25px; font-size: 14px; font-weight: bold; cursor: pointer;
+            background: #fff; border: none; border-radius: 5px; margin: 0 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         }
     </style>
 </head>
 <body>
 
-    <div id="loading">Please wait.. It's loading..</div>
-    
+    <div id="loading">It's loading.. Please wait..</div>
     <div id="book" class="book"></div>
 
     <div class="buttons">
-        <button id="prevBtn">Previous</button>
-        <button id="nextBtn">Next</button>
+        <button id="prevBtn">◀ Previous</button>
+        <button id="nextBtn">Next ▶</button>
     </div>
 
     <script>
-        // PDF DOSYANIN ADINI KONTROL ET
         const pdfUrl = 'Enza Home Collections.pdf'; 
-
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
         let currentId = 0;
         let pages = [];
+        let pdfDoc = null;
 
-        async function createFlipbook() {
+        // Belirli bir sayfayı render eden çekirdek fonksiyon
+        async function renderPage(pageNum, totalPages, bookContainer) {
             try {
-                const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+                const page = await pdfDoc.getPage(pageNum);
+                
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page';
+                pageDiv.style.zIndex = totalPages - pageNum; 
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                const viewport = page.getViewport({ scale: 1.8 });
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                pageDiv.appendChild(canvas);
+                bookContainer.appendChild(pageDiv);
+
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+                
+                const index = pageNum - 1;
+                pageDiv.addEventListener('click', () => {
+                    if (index === currentId) { flipNext(); } 
+                    else if (index === currentId - 1) { flipPrev(); }
+                });
+
+                pages[index] = pageDiv;
+            } catch (err) {
+                console.error("Sayfa render hatası: " + pageNum, err);
+            }
+        }
+
+        async function initPrioritizedBook() {
+            try {
+                pdfDoc = await pdfjsLib.getDocument(pdfUrl).promise;
+                const totalPages = pdfDoc.numPages;
                 const book = document.getElementById('book');
 
-                // PDF Sayfalarını sırayla DOM'a ekliyoruz
-                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    const page = await pdf.getPage(pageNum);
-                    
-                    const pageDiv = document.createElement('div');
-                    pageDiv.className = 'page';
-                    // Z-index ayarı: İlk sayfalar üstte durmalı
-                    pageDiv.style.zIndex = pdf.numPages - pageNum; 
-                    
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    
-                    const viewport = page.getViewport({ scale: 1.5 });
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
+                pages = new Array(totalPages);
 
-                    pageDiv.appendChild(canvas);
-                    book.appendChild(pageDiv);
-
-                    await page.render({ canvasContext: context, viewport: viewport }).promise;
-                    pages.push(pageDiv);
+                // 1. ADIM: İlk 5 sayfayı (veya PDF daha kısaysa toplam sayfa kadarını) sırayla ve zorunlu yükle
+                const priorityLimit = Math.min(5, totalPages);
+                for (let pageNum = 1; pageNum <= priorityLimit; pageNum++) {
+                    await renderPage(pageNum, totalPages, book);
                 }
 
-                // Yükleme bitti, kitabı göster
+                // İlk 5 sayfa biter bitmez sunumu hemen aç, bekleme ekranını kaldır
                 document.getElementById('loading').style.display = 'none';
                 book.style.display = 'block';
 
-                // Sayfa Tıklama İle Çevirme Etkinliği
-                pages.forEach((page, index) => {
-                    page.addEventListener('click', () => {
-                        if (index === currentId) {
-                            // İleri çevir
-                            page.classList.add('flipped');
-                            page.style.zIndex = index;
-                            currentId++;
-                        } else if (index === currentId - 1) {
-                            // Geri çevir
-                            page.classList.remove('flipped');
-                            page.style.zIndex = pages.length - index;
-                            currentId--;
-                        }
-                    });
-                });
-
-                // Buton Kontrolleri
-                document.getElementById('nextBtn').addEventListener('click', () => {
-                    if (currentId < pages.length) {
-                        pages[currentId].classList.add('flipped');
-                        pages[currentId].style.zIndex = currentId;
-                        currentId++;
+                // 2. ADIM: Eğer sunum 5 sayfadan uzunsa, kalanları arka planda paralel yükle
+                if (totalPages > 5) {
+                    for (let pageNum = 6; pageNum <= totalPages; pageNum++) {
+                        renderPage(pageNum, totalPages, book); // await yok, arkada akacak
                     }
-                });
-
-                document.getElementById('prevBtn').addEventListener('click', () => {
-                    if (currentId > 0) {
-                        currentId--;
-                        pages[currentId].classList.remove('flipped');
-                        pages[currentId].style.zIndex = pages.length - currentId;
-                    }
-                });
+                }
 
             } catch (error) {
                 document.getElementById('loading').innerText = "Hata: " + error.message;
             }
         }
 
-        window.onload = createFlipbook;
+        function flipNext() {
+            if (currentId < pages.length && pages[currentId]) {
+                pages[currentId].classList.add('flipped');
+                pages[currentId].style.zIndex = currentId;
+                currentId++;
+            }
+        }
+
+        function flipPrev() {
+            if (currentId > 0 && pages[currentId - 1]) {
+                currentId--;
+                pages[currentId].classList.remove('flipped');
+                pages[currentId].style.zIndex = pages.length - currentId;
+            }
+        }
+
+        document.getElementById('nextBtn').addEventListener('click', flipNext);
+        document.getElementById('prevBtn').addEventListener('click', flipPrev);
+
+        window.onload = initPrioritizedBook;
     </script>
 </body>
 </html>
