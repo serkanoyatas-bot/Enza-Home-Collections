@@ -3,37 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enza Home Collections - Absolute Responsive Viewer</title>
+    <title>Enza Home Collections - Fixed Interface Viewer</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        /* Tüm ekranı esnek bir yönetim paneline (Dashboard) çeviriyoruz */
         body {
-            margin: 0; padding: 0;
             background: radial-gradient(circle, #242424 0%, #0f0f0f 100%);
-            display: flex; flex-direction: column;
-            justify-content: center; align-items: center;
-            height: 100vh; font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
             overflow: hidden;
             color: #fff;
+            padding: 15px 0;
         }
         
-        #loading { font-size: 16px; letter-spacing: 1px; margin-bottom: 20px; }
+        #loading { font-size: 16px; letter-spacing: 1px; margin: auto; }
         
-        /* SAHNE: Sayfanın yaşayacağı maksimum alan boundary */
+        /* ÜST ALAN: Katalog alanı ekrandan kalan boşluğa göre dinamik daralır, asla taşmaz */
         .scene {
-            position: relative;
+            flex: 1;
             width: 95vw;
-            height: 75vh;
             display: flex;
             justify-content: center;
             align-items: center;
             overflow: hidden;
-            border-radius: 8px;
+            position: relative;
         }
 
-        /* Taşıyıcı konteyner */
         .pan-zoom-container {
             position: absolute;
             display: none;
@@ -43,7 +46,6 @@
         }
         .pan-zoom-container:active { cursor: grabbing; }
         
-        /* KATALOG ÇERÇEVESİ: Boyutları JS tarafından milimetrik yönetilir */
         .book {
             position: relative;
             display: flex;
@@ -51,7 +53,6 @@
             align-items: center;
         }
         
-        /* SAYFA YAPISI */
         .page {
             position: absolute;
             top: 0; left: 0;
@@ -69,17 +70,33 @@
             width: 100% !important;
             height: 100% !important;
             display: block;
-            background: #fff;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
             border-radius: 6px;
         }
+
+        /* Dikey kapak sayfasının arkasındaki beyaz sırıtmaları yok etmek için temizlik */
+        .page.vertical-cover canvas {
+            background: transparent !important;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.9);
+        }
         
-        /* Kontrol Paneli */
+        /* ALT ALAN: Arayüz ve Alt Bar Alanı - Ekrana Çakılıdır, Katalog Buraya Taşamaz */
+        .bottom-bar-area {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding-top: 10px;
+            flex-shrink: 0; /* Bozulmayı ve ezilmeyi engeller */
+        }
+
         .controls {
-            margin-top: 25px; display: flex; align-items: center; gap: 15px; 
-            z-index: 99999;
-            background: rgba(0,0,0,0.8); padding: 10px 25px; border-radius: 50px;
-            backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.1);
+            display: flex; align-items: center; gap: 15px; 
+            background: rgba(0,0,0,0.85); padding: 12px 28px; border-radius: 50px;
+            backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         
         button {
@@ -91,7 +108,7 @@
         button:disabled { opacity: 0.2; cursor: not-allowed; }
         
         #pageIndicator { font-size: 14px; min-width: 75px; text-align: center; font-weight: bold; }
-        .hint { font-size: 11px; color: #666; margin-top: 8px; }
+        .hint { font-size: 11px; color: #666; text-shadow: 0 1px 2px #000; }
     </style>
 </head>
 <body>
@@ -104,14 +121,16 @@
         </div>
     </div>
 
-    <div class="controls">
-        <button id="prevBtn" disabled>◀ Önceki</button>
-        <span id="pageIndicator">0 / 0</span>
-        <button id="nextBtn">Sonraki ▶</button>
-        <button id="zoomInBtn">🔍 +</button>
-        <button id="zoomOutBtn">🔍 -</button>
+    <div class="bottom-bar-area" id="bottomBarArea">
+        <div class="controls">
+            <button id="prevBtn" disabled>◀ Previous</button>
+            <span id="pageIndicator">0 / 0</span>
+            <button id="nextBtn">Next ▶</button>
+            <button id="zoomInBtn">🔍 +</button>
+            <button id="zoomOutBtn">🔍 -</button>
+        </div>
+        <div class="hint">Tip: You can also zoom in and out of the page with the mouse.</div>
     </div>
-    <div class="hint">EYou can make stable transitions using the arrow keys. You can zoom in and out of the page.</div>
 
     <script>
         const pdfUrl = 'Enza Home Collections.pdf'; 
@@ -129,18 +148,19 @@
         const zoomContainer = document.getElementById('zoomContainer');
         const book = document.getElementById('book');
         const scene = document.getElementById('scene');
+        const bottomBarArea = document.getElementById('bottomBarArea');
 
-        // Sayfa Değiştiğinde Boyutları Ekrana Göre Yeniden Hesaplayan Hayati Fonksiyon
+        // Akıllı Cetvel: Sayfayı Alt Barın Sınırına Sıfırlayan Formül
         function resizeBookToFit(viewport) {
             const sceneW = scene.clientWidth;
+            // Sahnenin net yüksekliğini alıyoruz (Flexbox sayesinde alt bar zaten düşülmüş durumda)
             const sceneH = scene.clientHeight;
 
-            // Sayfayı ekrana taşırmadan sığdıracak en büyük çarpanı buluyoruz
-            const scaleX = sceneW / viewport.width;
-            const scaleY = sceneH / viewport.height;
+            // Güvenlik marjı bırakarak (%92) sayfanın alt bara değmesini matematiksel olarak engelliyoruz
+            const scaleX = (sceneW * 0.95) / viewport.width;
+            const scaleY = (sceneH * 0.92) / viewport.height;
             const idealScale = Math.min(scaleX, scaleY);
 
-            // Üst üste binme veya sol üste kaçma hatasını çözen net piksel ataması
             const finalWidth = viewport.width * idealScale;
             const finalHeight = viewport.height * idealScale;
 
@@ -151,12 +171,15 @@
         async function renderPage(pageNum, totalPages) {
             try {
                 const page = await pdfDoc.getPage(pageNum);
-                
-                // Netlik kalitesi için PDF'i yüksek çözünürlük katsayısıyla (2.0) hafızaya alıyoruz
-                const viewport = page.getViewport({ scale: 2.0 });
+                const viewport = page.getViewport({ scale: 2.0 }); // Netlik koruması
 
                 const pageDiv = document.createElement('div');
                 pageDiv.className = 'page';
+                
+                // Kapak Rezilliği Çözümü: Eğer ilk sayfa dikey kurguysa özel sınıf ata
+                if (pageNum === 1 && viewport.width < viewport.height) {
+                    pageDiv.classList.add('vertical-cover');
+                }
                 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
@@ -166,10 +189,7 @@
                 pageDiv.appendChild(canvas);
                 book.appendChild(pageDiv);
 
-                // Sayfayı render etmesi için PDF.js motoruna gönderiyoruz
                 const renderTask = page.render({ canvasContext: context, viewport: viewport });
-                
-                // Gelecekte boyutlandırma yapabilmek için viewport verisini elemente bağlıyoruz
                 pageDiv.pdfViewport = page.getViewport({ scale: 1.0 }); 
                 pages[pageNum - 1] = pageDiv;
 
@@ -184,7 +204,6 @@
                 const totalPages = pdfDoc.numPages;
                 pages = new Array(totalPages);
 
-                // İlk 3 sayfayı jet hızıyla yükle
                 const firstBatch = Math.min(3, totalPages);
                 for (let pageNum = 1; pageNum <= firstBatch; pageNum++) {
                     await renderPage(pageNum, totalPages);
@@ -194,7 +213,6 @@
                 zoomContainer.style.display = 'block';
                 updateBookDisplay();
 
-                // Kalan sayfalar arkadan sessizce beslenir
                 if (totalPages > 3) {
                     for (let pageNum = 4; pageNum <= totalPages; pageNum++) {
                         renderPage(pageNum, totalPages);
@@ -203,7 +221,6 @@
             } catch (error) { console.error(error); }
         }
 
-        // JS Güdümlü Gösterim Motoru
         function updateBookDisplay() {
             const total = pages.length;
             if (total === 0) return;
@@ -212,7 +229,7 @@
                 if (!page) return;
                 if (index === currentId) {
                     page.classList.add('active-page');
-                    // CSS hesaplamasına güvenmiyoruz, JS ile piksel mühürlemesi yapıyoruz:
+                    // JS tabanlı milimetrik sınır mühürlemesi tetiklenir
                     resizeBookToFit(page.pdfViewport);
                 } else {
                     page.classList.remove('active-page');
@@ -249,7 +266,7 @@
             zoomContainer.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
         }
 
-        // Pürüzsüz Zoom ve Pan (Sürükleme) Kontrolleri
+        // Mouse Wheel & Drag
         scene.addEventListener('wheel', (e) => {
             e.preventDefault();
             if (e.deltaY < 0) { scale = Math.min(scale + 0.2, 5); } 
@@ -284,7 +301,6 @@
             if (e.key === "ArrowLeft") flipPrev();
         });
 
-        // Pencere boyutu değiştiğinde kataloğu koru
         window.addEventListener('resize', () => {
             if (pages[currentId]) updateBookDisplay();
         });
