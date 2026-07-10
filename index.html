@@ -25,6 +25,7 @@
         
         #loading { font-size: 16px; letter-spacing: 1px; margin: auto; }
 
+        /* ANA GÖVDE: Sol tarafta katalog, Sağ tarafta Önizleme Listesi */
         .main-container {
             display: flex;
             width: 98vw;
@@ -33,6 +34,7 @@
             gap: 15px;
         }
         
+        /* KATALOG SAHNESİ */
         .scene {
             flex: 1;
             display: flex;
@@ -48,9 +50,11 @@
             cursor: grab;
             transform-origin: center center;
             will-change: transform;
+            z-index: 10; /* Okların arkasında kalması için optimize edildi */
         }
         .pan-zoom-container:active { cursor: grabbing; }
         
+        /* Akıllı Kitap Kutusu */
         .book {
             position: relative;
             display: flex;
@@ -89,8 +93,8 @@
             position: absolute;
             top: 0;
             height: 100%;
-            width: 150px; /* Fareyi kenara ne kadar yaklaştırınca ok çıksın? */
-            z-index: 100;
+            width: 150px; /* Fare kenara bu kadar yaklaşınca ok tetiklenir */
+            z-index: 9999 !important; /* Zoom alanının tamamen önüne geçirdik */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -118,14 +122,17 @@
             user-select: none;
         }
 
-        /* Fare kenar bölgeye girince oku tatlıca göster */
+        /* Fare kenar bölgeye girince ok görünür ve imleç tıklama eline döner */
+        .nav-overlay-zone:hover {
+            cursor: pointer;
+        }
         .nav-overlay-zone:hover .arrow-btn {
             opacity: 1;
             background: rgba(0, 0, 0, 0.75);
             border-color: rgba(255, 255, 255, 0.5);
         }
         
-        /* Okun üzerine tam gelindiğinde ekstra parlasın */
+        /* Okun üzerine tam gelindiğinde parlasın */
         .arrow-btn:hover {
             transform: scale(1.1);
             background: #fff !important;
@@ -146,6 +153,7 @@
             gap: 20px;
             padding: 20px 10px;
             backdrop-filter: blur(15px);
+            z-index: 100;
         }
 
         .sidebar-thumbnails::-webkit-scrollbar { width: 6px; }
@@ -170,7 +178,7 @@
         
         .thumb-box canvas {
             width: 100% !important;
-            height: auto !important;
+            height: auto !important; /* Yükseklik baskısı kaldırıldı, büzüşme bitti */
             display: block;
             box-shadow: none;
             border-radius: 0;
@@ -197,6 +205,7 @@
             gap: 8px;
             padding-top: 10px;
             flex-shrink: 0;
+            z-index: 100;
         }
 
         .controls {
@@ -245,16 +254,15 @@
     <div class="main-container" id="mainContainer" style="display: none;">
         <div class="scene" id="scene">
             
-            <div class="nav-overlay-zone left-zone">
+            <div id="zoomContainer" class="pan-zoom-container">
+                <div id="book" class="book"></div>
+            </div>
+
+            <div class="nav-overlay-zone left-zone" id="zoneLeft">
                 <div class="arrow-btn" id="overlayPrevBtn">&#10094;</div>
             </div>
 
-            <div id="zoomContainer" class="pan-zoom-container">
-                <div id="book" class="book">
-                    </div>
-            </div>
-
-            <div class="nav-overlay-zone right-zone">
+            <div class="nav-overlay-zone right-zone" id="zoneRight">
                 <div class="arrow-btn" id="overlayNextBtn">&#10095;</div>
             </div>
 
@@ -464,12 +472,14 @@
             zoomContainer.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
         }
 
-        // YENİ OK BUTONLARININ DINAMIK TETIKLEYICILERI
-        document.getElementById('overlayPrevBtn').addEventListener('click', (e) => {
+        // BAĞIMSIZ HALE GETİRİLEN VE KATMAN ÇAKIŞMASI ÇÖZÜLEN OK TETİKLEYİCİLERİ
+        document.getElementById('zoneLeft').addEventListener('click', (e) => {
+            if (scale > 1) return; // Zoom durumunda pan yapılabilsin diye okları engelle
             e.stopPropagation();
             flipPrev();
         });
-        document.getElementById('overlayNextBtn').addEventListener('click', (e) => {
+        document.getElementById('zoneRight').addEventListener('click', (e) => {
+            if (scale > 1) return;
             e.stopPropagation();
             flipNext();
         });
@@ -498,7 +508,8 @@
         });
 
         scene.addEventListener('mousedown', (e) => {
-            if (scale === 1) return;
+            // Sadece orta alanda veya yakınlaşınca drag (sürükleme) aktif olsun, ok bölgelerinde tıklamayı kesmesin
+            if (scale === 1 || e.target.closest('.nav-overlay-zone')) return;
             isDragging = true;
             startX = e.clientX - posX;
             startY = e.clientY - posY;
