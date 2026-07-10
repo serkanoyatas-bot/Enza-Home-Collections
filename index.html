@@ -92,75 +92,69 @@
             position: absolute;
             top: 0;
             height: 100%;
-            width: 30%; /* Sayfanın sağından ve solundan %30'luk alanları tıkla-geç yapar */
+            width: 30%; 
             z-index: 10;
             cursor: pointer;
         }
         .click-zone.zone-left { left: 0; }
         .click-zone.zone-right { right: 0; }
         
-        /* SAĞ PANEL: POWERPOINT TARZI NİZAMİ SLAYT LİSTESİ */
+        /* SAĞ PANEL: GERÇEK POWERPOINT SLAYT ŞERİDİ */
         .sidebar-thumbnails {
-            width: 200px; /* Görsellerin rahat sığması için biraz genişletildi */
-            background: rgba(0, 0, 0, 0.5);
+            width: 220px; /* Slaytların rahat görünmesi için genişlik */
+            background: rgba(0, 0, 0, 0.55);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+            border-radius: 10px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 16px; /* Slaytların arasında PowerPoint gibi net boşluk */
-            padding: 15px;
-            backdrop-filter: blur(10px);
+            align-items: center; /* Slaytları yatayda tam ortalar */
+            gap: 20px; /* Slaytların arasında PowerPoint boşluğu */
+            padding: 20px 10px;
+            backdrop-filter: blur(15px);
         }
 
         /* İnce Kaydırma Çubuğu Tasarımı */
         .sidebar-thumbnails::-webkit-scrollbar { width: 6px; }
-        .sidebar-thumbnails::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        .sidebar-thumbnails::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 10px; }
 
-        /* Slayt Kutusu Framework'ü */
+        /* Slayt Kutusu - Sabit Oran Baskısı Kaldırıldı */
         .thumb-box {
             position: relative;
-            width: 100%;
-            /* Üst üste binmeyi engelleyen hayati koruma (Katalog yatay olduğu için 16/9 idealdir) */
-            aspect-ratio: 16 / 10; 
+            width: 90%; /* Panel genişliğine göre nizami yayılma */
             cursor: pointer;
-            border: 2px solid rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.2);
             border-radius: 6px;
             overflow: hidden;
             transition: all 0.2s ease-in-out;
             opacity: 0.5;
-            background: #1e1e1e; /* Resim yüklenene kadar boşluğu korur */
-            flex-shrink: 0; /* Kutuların dikeyde ezilmesini kesinlikle engeller */
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            background: rgba(255, 255, 255, 0.05);
+            flex-shrink: 0; /* Ezilmeyi engeller */
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
         }
         
-        /* Dikey kapak sayfası gelirse onun kutusunu dikey oranla koru */
-        .thumb-box.vertical-thumb {
-            aspect-ratio: 7 / 10;
-        }
+        .thumb-box:hover { opacity: 0.9; transform: scale(1.03); border-color: rgba(255,255,255,0.6); }
+        .thumb-box.active-thumb { border-color: #fff; opacity: 1; box-shadow: 0 0 15px rgba(255,255,255,0.5); }
         
-        .thumb-box:hover { opacity: 0.9; transform: scale(1.02); border-color: rgba(255,255,255,0.5); }
-        .thumb-box.active-thumb { border-color: #fff; opacity: 1; box-shadow: 0 0 15px rgba(255,255,255,0.4); }
-        
+        /* Canvas'ın Orijinal PDF Oranını Korumasını Sağlayan Sihirli CSS */
         .thumb-box canvas {
             width: 100% !important;
-            height: 100% !important;
-            object-fit: cover; /* Resmi kutunun içine tam nizam yerleştirir */
+            height: auto !important; /* Yüksekliği serbest bırakıyoruz ki büzüşme bitsin */
+            display: block;
             box-shadow: none;
             border-radius: 0;
-            display: block;
         }
 
-        /* Sol veya Sağ Alt Köşedeki Sayfa Numarası */
+        /* Sayfa Numarası Etiketi */
         .thumb-label {
             position: absolute;
             bottom: 4px; right: 6px;
-            background: rgba(0,0,0,0.75);
+            background: rgba(0,0,0,0.8);
             color: #fff; font-size: 11px;
             font-weight: bold;
             padding: 2px 6px; border-radius: 4px;
             z-index: 5;
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.15);
         }
         
         /* ARABİRİM VE KONTROL ALANI */
@@ -314,16 +308,12 @@
         async function renderThumbnail(pageNum) {
             try {
                 const page = await pdfDoc.getPage(pageNum);
-                const viewport = page.getViewport({ scale: 0.3 }); 
+                // Küçük resim çözünürlüğünü netlik açısından 0.4 yaptık
+                const viewport = page.getViewport({ scale: 0.4 }); 
 
                 const thumbBox = document.createElement('div');
                 thumbBox.className = 'thumb-box';
                 thumbBox.dataset.index = pageNum - 1;
-                
-                // Kapak veya dikey sayfa kontrolü yapıp dikey oranı koruyoruz
-                if (viewport.width < viewport.height) {
-                    thumbBox.classList.add('vertical-thumb');
-                }
 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
