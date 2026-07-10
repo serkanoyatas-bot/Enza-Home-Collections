@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enza Home Collections - Final Master Book</title>
+    <title>Enza Home Collections - Perfect Fit Catalog</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
@@ -21,17 +21,20 @@
         
         #loading { font-size: 16px; letter-spacing: 1px; margin-bottom: 20px; }
         
+        /* Ekran Sınırları - Sayfayı Bu Alana Sığdıracağız */
         .scene {
             position: relative;
-            width: 95vw;
+            width: 90vw;
             height: 75vh;
             display: flex;
             justify-content: center;
             align-items: center;
             overflow: hidden;
             border-radius: 8px;
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.6);
         }
 
+        /* Zoom ve Kaydırma Alanı */
         .pan-zoom-container {
             position: absolute;
             display: none;
@@ -41,55 +44,45 @@
         }
         .pan-zoom-container:active { cursor: grabbing; }
         
-        /* KİTAP ÇERÇEVESİ */
+        /* KATALOG GÖVDESİ */
         .book {
             position: relative;
-            display: flex; 
-            overflow: hidden;
-            border-radius: 6px;
-            box-shadow: 0 30px 70px rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
         
-        /* Sol ve Sağ Kanatlar */
-        .book-wing {
-            position: relative;
-            width: 50%;
-            height: 100%;
-            overflow: hidden;
-        }
-        
-        /* Sayfa Katmanları */
+        /* Her Bir Sayfa: Tam Sığan Tek Parça Yapı */
         .page {
             position: absolute;
-            top: 0; left: 0;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
             width: 100%; height: 100%;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
-            will-change: opacity, transform;
+            transition: opacity 0.3s ease-in-out;
+            will-change: opacity;
         }
         
-        /* Ekranda Aktif Olan Sayfa */
+        /* Sadece O Anki Aktif Sayfa Görünür */
         .page.active-page {
             opacity: 1;
             visibility: visible;
-            transform: translateX(0);
         }
 
         canvas {
             width: 100%; height: 100%;
             background: #fff;
             display: block;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            border-radius: 6px;
         }
-
-        .book-wing:first-child { border-radius: 6px 0 0 6px; border-right: 1px solid rgba(0,0,0,0.15); }
-        .book-wing:last-child { border-radius: 0 6px 6px 0; }
         
-        /* Kontrol Paneli */
+        /* Kontrol Butonları Paneli */
         .controls {
             margin-top: 25px; display: flex; align-items: center; gap: 15px; 
             z-index: 99999;
-            background: rgba(0,0,0,0.75); padding: 10px 25px; border-radius: 50px;
+            background: rgba(0,0,0,0.8); padding: 10px 25px; border-radius: 50px;
             backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.1);
         }
         
@@ -101,7 +94,7 @@
         button:hover { background: #e5e5e5; }
         button:disabled { opacity: 0.2; cursor: not-allowed; }
         
-        #pageIndicator { font-size: 14px; min-width: 90px; text-align: center; font-weight: bold; }
+        #pageIndicator { font-size: 14px; min-width: 75px; text-align: center; font-weight: bold; }
         .hint { font-size: 11px; color: #666; margin-top: 8px; }
     </style>
 </head>
@@ -111,10 +104,7 @@
     
     <div class="scene" id="scene">
         <div id="zoomContainer" class="pan-zoom-container">
-            <div id="book" class="book">
-                <div id="leftWing" class="book-wing"></div>
-                <div id="rightWing" class="book-wing"></div>
-            </div>
+            <div id="book" class="book"></div>
         </div>
     </div>
 
@@ -125,13 +115,13 @@
         <button id="zoomInBtn">🔍 +</button>
         <button id="zoomOutBtn">🔍 -</button>
     </div>
-    <div class="hint">Tip: You can make stable transitions using the arrow keys or by clicking. You can zoom in and out of the page..</div>
+    <div class="hint">You can make stable transitions using the arrow keys or by clicking. You can zoom in and out of the page.</div>
 
     <script>
         const pdfUrl = 'Enza Home Collections.pdf'; 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-        let currentId = 0; // 0 = Kapak görünümü (Sol boş, Sağda Sayfa 1)
+        let currentId = 0; // 0, 1, 2, 3... diye ardışık gider
         let pages = [];
         let pdfDoc = null;
         
@@ -142,30 +132,35 @@
 
         const zoomContainer = document.getElementById('zoomContainer');
         const book = document.getElementById('book');
-        const leftWing = document.getElementById('leftWing');
-        const rightWing = document.getElementById('rightWing');
         const scene = document.getElementById('scene');
 
+        // Sayfayı Ekrana Akıllıca Sığdıran Fonksiyon (Auto-Fit)
         async function renderPage(pageNum, totalPages) {
             try {
                 const page = await pdfDoc.getPage(pageNum);
                 const baseViewport = page.getViewport({ scale: 1 });
                 
-                const targetHeight = scene.clientHeight * 0.85;
-                const targetScale = targetHeight / baseViewport.height;
-                const viewport = page.getViewport({ scale: targetScale * 1.6 });
+                // Sahne sınırlarına göre en uygun sığma oranını (Fit) hesapla
+                const scaleX = (scene.clientWidth * 0.95) / baseViewport.width;
+                const scaleY = (scene.clientHeight * 0.95) / baseViewport.height;
+                const fitScale = Math.min(scaleX, scaleY); // Taşmayı önleyen altın oran
 
-                const pW = baseViewport.width * targetScale;
-                const pH = baseViewport.height * targetScale;
+                // Netlik kalitesi için canvas'ı yüksek çözünürlükte çizdiriyoruz
+                const viewport = page.getViewport({ scale: fitScale * 1.6 });
 
-                // Kitap gövdesini sabitle (Yatay sayfa genişliğine göre)
-                if (pageNum === 2 || (totalPages === 1 && pageNum === 1)) {
-                    book.style.width = (pW * 2) + 'px';
+                const pW = baseViewport.width * fitScale;
+                const pH = baseViewport.height * fitScale;
+
+                // İlk sayfada ana kapsayıcı boyutlarını kilitliyoruz
+                if (pageNum === 1) {
+                    book.style.width = pW + 'px';
                     book.style.height = pH + 'px';
                 }
 
                 const pageDiv = document.createElement('div');
                 pageDiv.className = 'page';
+                pageDiv.style.width = pW + 'px';
+                pageDiv.style.height = pH + 'px';
                 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
@@ -173,17 +168,7 @@
                 canvas.width = viewport.width;
 
                 pageDiv.appendChild(canvas);
-
-                // KESİN ÇÖZÜM: Gerçek Dergi/Kitap Dağılım Matrisi
-                // 1. Sayfa (Kapak) -> SAĞ kanada gider.
-                // Sonraki sayfalarda: Çift numaralar SOLA, Tek numaralar SAĞA gider.
-                if (pageNum === 1) {
-                    rightWing.appendChild(pageDiv);
-                } else if (pageNum % 2 === 0) {
-                    leftWing.appendChild(pageDiv);  // 2, 4, 6, 8...
-                } else {
-                    rightWing.appendChild(pageDiv); // 3, 5, 7, 9...
-                }
+                book.appendChild(pageDiv);
 
                 await page.render({ canvasContext: context, viewport: viewport }).promise;
                 
@@ -198,7 +183,7 @@
                 const totalPages = pdfDoc.numPages;
                 pages = new Array(totalPages);
 
-                // İlk 3 sayfayı anında basıyoruz
+                // İlk 3 sayfayı hızla ekrana bas
                 const firstBatch = Math.min(3, totalPages);
                 for (let pageNum = 1; pageNum <= firstBatch; pageNum++) {
                     await renderPage(pageNum, totalPages);
@@ -208,7 +193,7 @@
                 zoomContainer.style.display = 'block';
                 updateBookDisplay();
 
-                // Kalan sayfalar arkadan senkronize gelir
+                // Kalanlar arkadan pürüzsüzce beslenir
                 if (totalPages > 3) {
                     for (let pageNum = 4; pageNum <= totalPages; pageNum++) {
                         renderPage(pageNum, totalPages);
@@ -217,63 +202,54 @@
             } catch (error) { console.error(error); }
         }
 
-        // Akıllı Sayfa Eşleştirme Düzeni
+        // Net Ardışık Gösterim Düzeni
         function updateBookDisplay() {
             const total = pages.length;
             if (total === 0) return;
 
             pages.forEach((page, index) => {
                 if (!page) return;
-                page.classList.remove('active-page');
-
-                if (currentId === 0) {
-                    // KAPAK MODU: Sadece 1. sayfa (indeks 0) sağda aktif olsun
-                    if (index === 0) page.classList.add('active-page');
+                if (index === currentId) {
+                    page.classList.add('active-page');
+                    // Dinamik genişlik ayarı (İlk dikey sayfa ile yatay iç sayfalar arası geçişi esnetir)
+                    book.style.width = page.style.width;
+                    book.style.height = page.style.height;
                 } else {
-                    // İÇ SAYFA MODU: Seçilen çift yan yana gelsin (Örn: currentId=1 ise indeks 1 ve 2, yani Sayfa 2 ve 3)
-                    if (index === currentId || index === currentId + 1) {
-                        page.classList.add('active-page');
-                    }
+                    page.classList.remove('active-page');
                 }
             });
 
-            // Buton Sınırları
             document.getElementById('prevBtn').disabled = (currentId === 0);
             document.getElementById('nextBtn').disabled = (currentId >= total - 1);
-            
-            // Sayfa Sayacı Güncellemesi (Kapakta "1", iç sayfalarda "2-3" yazar)
-            if (currentId === 0) {
-                document.getElementById('pageIndicator').innerText = `1 / ${total}`;
-            } else {
-                const rightPage = Math.min(currentId + 2, total);
-                document.getElementById('pageIndicator').innerText = `${currentId + 1}-${rightPage} / ${total}`;
-            }
+            document.getElementById('pageIndicator').innerText = `${currentId + 1} / ${total}`;
         }
 
         function flipNext() {
-            const total = pages.length;
-            if (currentId === 0) {
-                currentId = 1; // Kapaktan iç sayfalara geçiş (Sayfa 2 ve 3'ü açar)
-            } else if (currentId < total - 2) {
-                currentId += 2; // İç sayfalarda ikişer ikişer ak
+            if (currentId < pages.length - 1) {
+                currentId++;
+                resetZoom();
+                updateBookDisplay();
             }
-            updateBookDisplay();
         }
 
         function flipPrev() {
-            if (currentId === 1) {
-                currentId = 0; // İç sayfalardan tekrar kapağa dön
-            } else if (currentId > 1) {
-                currentId -= 2; // İç sayfalarda ikişer ikişer geri gel
+            if (currentId > 0) {
+                currentId--;
+                resetZoom();
+                updateBookDisplay();
             }
-            updateBookDisplay();
+        }
+
+        function resetZoom() {
+            scale = 1; posX = 0; posY = 0;
+            updateTransform();
         }
 
         function updateTransform() {
             zoomContainer.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
         }
 
-        // Zoom & Sürükleme Kontrolleri
+        // Akıllı Zoom & Drag Motoru
         scene.addEventListener('wheel', (e) => {
             e.preventDefault();
             if (e.deltaY < 0) { scale = Math.min(scale + 0.15, 4); } 
