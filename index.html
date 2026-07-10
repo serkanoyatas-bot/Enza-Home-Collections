@@ -99,51 +99,68 @@
         .click-zone.zone-left { left: 0; }
         .click-zone.zone-right { right: 0; }
         
-        /* SAĞ PANEL: Dikey Küçük Görsel Listesi (Thumbnails) */
+        /* SAĞ PANEL: POWERPOINT TARZI NİZAMİ SLAYT LİSTESİ */
         .sidebar-thumbnails {
-            width: 180px;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            width: 200px; /* Görsellerin rahat sığması için biraz genişletildi */
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 8px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            padding: 12px;
+            gap: 16px; /* Slaytların arasında PowerPoint gibi net boşluk */
+            padding: 15px;
             backdrop-filter: blur(10px);
         }
 
         /* İnce Kaydırma Çubuğu Tasarımı */
-        .sidebar-thumbnails::-webkit-scrollbar { width: 5px; }
+        .sidebar-thumbnails::-webkit-scrollbar { width: 6px; }
         .sidebar-thumbnails::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
 
+        /* Slayt Kutusu Framework'ü */
         .thumb-box {
             position: relative;
             width: 100%;
+            /* Üst üste binmeyi engelleyen hayati koruma (Katalog yatay olduğu için 16/9 idealdir) */
+            aspect-ratio: 16 / 10; 
             cursor: pointer;
-            border: 2px solid transparent;
-            border-radius: 4px;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
             overflow: hidden;
-            transition: all 0.2s ease;
-            opacity: 0.6;
-            background: #1a1a1a;
+            transition: all 0.2s ease-in-out;
+            opacity: 0.5;
+            background: #1e1e1e; /* Resim yüklenene kadar boşluğu korur */
+            flex-shrink: 0; /* Kutuların dikeyde ezilmesini kesinlikle engeller */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-        .thumb-box:hover { opacity: 0.9; transform: scale(1.03); }
-        .thumb-box.active-thumb { border-color: #fff; opacity: 1; box-shadow: 0 0 10px rgba(255,255,255,0.3); }
+        
+        /* Dikey kapak sayfası gelirse onun kutusunu dikey oranla koru */
+        .thumb-box.vertical-thumb {
+            aspect-ratio: 7 / 10;
+        }
+        
+        .thumb-box:hover { opacity: 0.9; transform: scale(1.02); border-color: rgba(255,255,255,0.5); }
+        .thumb-box.active-thumb { border-color: #fff; opacity: 1; box-shadow: 0 0 15px rgba(255,255,255,0.4); }
         
         .thumb-box canvas {
             width: 100% !important;
-            height: auto !important;
+            height: 100% !important;
+            object-fit: cover; /* Resmi kutunun içine tam nizam yerleştirir */
             box-shadow: none;
             border-radius: 0;
+            display: block;
         }
 
+        /* Sol veya Sağ Alt Köşedeki Sayfa Numarası */
         .thumb-label {
             position: absolute;
-            bottom: 2px; right: 4px;
-            background: rgba(0,0,0,0.7);
-            color: #fff; font-size: 10px;
-            padding: 1px 4px; border-radius: 3px;
+            bottom: 4px; right: 6px;
+            background: rgba(0,0,0,0.75);
+            color: #fff; font-size: 11px;
+            font-weight: bold;
+            padding: 2px 6px; border-radius: 4px;
+            z-index: 5;
+            border: 1px solid rgba(255,255,255,0.1);
         }
         
         /* ARABİRİM VE KONTROL ALANI */
@@ -173,7 +190,6 @@
         button:hover { background: #e5e5e5; }
         button:disabled { opacity: 0.2; cursor: not-allowed; }
         
-        /* Direktörün İstediği Sayfa Giriş Kutusu */
         .goto-container {
             display: flex;
             align-items: center;
@@ -228,7 +244,7 @@
             <button id="zoomInBtn">🔍 +</button>
             <button id="zoomOutBtn">🔍 -</button>
         </div>
-        <div class="hint">You can also zoom in and out of the page with the mouse.</div>
+        <div class="hint">Tip: You can also zoom in and out of the page with the mouse.</div>
     </div>
 
     <script>
@@ -266,7 +282,6 @@
             book.style.height = Math.floor(finalHeight) + 'px';
         }
 
-        // Ana Ekran Render İşlemi
         async function renderPage(pageNum, totalPages) {
             try {
                 const page = await pdfDoc.getPage(pageNum);
@@ -296,16 +311,19 @@
             } catch (err) { console.error(err); }
         }
 
-        // Sağ Paneldeki Küçük Görselleri (Thumbnails) Çizen Fonksiyon
         async function renderThumbnail(pageNum) {
             try {
                 const page = await pdfDoc.getPage(pageNum);
-                // Düşük çözünürlük panel için yeterli (Hızlı yüklenir)
-                const viewport = page.getViewport({ scale: 0.25 }); 
+                const viewport = page.getViewport({ scale: 0.3 }); 
 
                 const thumbBox = document.createElement('div');
                 thumbBox.className = 'thumb-box';
                 thumbBox.dataset.index = pageNum - 1;
+                
+                // Kapak veya dikey sayfa kontrolü yapıp dikey oranı koruyoruz
+                if (viewport.width < viewport.height) {
+                    thumbBox.classList.add('vertical-thumb');
+                }
 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
@@ -322,7 +340,6 @@
                 sidebarThumbnails.appendChild(thumbBox);
                 thumbElements[pageNum - 1] = thumbBox;
 
-                // Tıklayınca O Sayfaya Doğrudan Fırlama Kontrolü
                 thumbBox.addEventListener('click', () => {
                     currentId = pageNum - 1;
                     resetZoom();
@@ -340,7 +357,6 @@
                 pages = new Array(totalPages);
                 thumbElements = new Array(totalPages);
 
-                // İlk 3 sayfayı hemen ana ekrana bas
                 const firstBatch = Math.min(3, totalPages);
                 for (let pageNum = 1; pageNum <= firstBatch; pageNum++) {
                     await renderPage(pageNum, totalPages);
@@ -351,10 +367,8 @@
                 zoomContainer.style.display = 'block';
                 updateBookDisplay();
 
-                // Sağ panel önizlemelerini ve kalan sayfaları arka planda sırayla doldur
                 for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
                     renderThumbnail(pageNum).then(() => {
-                        // Eğer aktif thumbnail ise işaretle
                         if (pageNum - 1 === currentId && thumbElements[currentId]) {
                             thumbElements[currentId].classList.add('active-thumb');
                         }
@@ -371,7 +385,6 @@
             const total = pages.length;
             if (total === 0) return;
 
-            // Ana Ekran Değişimi
             pages.forEach((page, index) => {
                 if (!page) return;
                 if (index === currentId) {
@@ -382,23 +395,19 @@
                 }
             });
 
-            // Sağ Panel Thumbnail Aktifliği ve Otomatik Scroll Takibi
             thumbElements.forEach((thumb, index) => {
                 if (!thumb) return;
                 if (index === currentId) {
                     thumb.classList.add('active-thumb');
-                    // Aktif küçük resmi sağ panel içinde görünür alana taşır
                     thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } else {
                     thumb.classList.remove('active-thumb');
                 }
             });
 
-            // Alt Arayüz Elemanları Güncellemesi
             document.getElementById('prevBtn').disabled = (currentId === 0);
             document.getElementById('nextBtn').disabled = (currentId >= total - 1);
             
-            // Kutu içindeki numarayı ve toplam sayıyı eşitle
             gotoInput.value = currentId + 1;
             document.getElementById('pageIndicator').innerText = `/ ${total}`;
         }
@@ -428,9 +437,8 @@
             zoomContainer.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
         }
 
-        // Tıklayarak Geçiş Alanı Dinamik Tetikleyicileri
         document.getElementById('zoneLeft').addEventListener('click', (e) => {
-            if (scale > 1) return; // Zoom yapılmışsa tıklayıp geçmesin, pan yapsın
+            if (scale > 1) return; 
             e.stopPropagation();
             flipPrev();
         });
@@ -440,7 +448,6 @@
             flipNext();
         });
 
-        // Sayfa Giriş Kutusu Takipçisi (Enter Kontrolü)
         gotoInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 let targetPage = parseInt(gotoInput.value);
@@ -449,14 +456,13 @@
                     currentId = targetPage - 1;
                     resetZoom();
                     updateBookDisplay();
-                    gotoInput.blur(); // Odaklanmayı kaldır
+                    gotoInput.blur();
                 } else {
-                    gotoInput.value = currentId + 1; // Hatalı girildiyse eski haline çek
+                    gotoInput.value = currentId + 1;
                 }
             }
         });
 
-        // Mouse Wheel & Sürükleme Motoru
         scene.addEventListener('wheel', (e) => {
             e.preventDefault();
             if (e.deltaY < 0) { scale = Math.min(scale + 0.2, 5); } 
@@ -487,7 +493,7 @@
         document.getElementById('prevBtn').addEventListener('click', flipPrev);
 
         window.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT') return; // Kutuda numara yazarken yön tuşları sayfayı çevirmesin
+            if (e.target.tagName === 'INPUT') return; 
             if (e.key === "ArrowRight" || e.key === " ") flipNext();
             if (e.key === "ArrowLeft") flipPrev();
         });
