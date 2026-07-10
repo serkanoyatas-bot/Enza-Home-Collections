@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enza Home Collections - Fixed Fit Viewer</title>
+    <title>Enza Home Collections - Absolute Responsive Viewer</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
@@ -21,11 +21,11 @@
         
         #loading { font-size: 16px; letter-spacing: 1px; margin-bottom: 20px; }
         
-        /* SAHNE: Ekran sınırlarını belirleyen ana kafes */
+        /* SAHNE: Sayfanın yaşayacağı maksimum alan boundary */
         .scene {
             position: relative;
-            width: 90vw;
-            height: 72vh;
+            width: 95vw;
+            height: 75vh;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -33,56 +33,44 @@
             border-radius: 8px;
         }
 
-        /* ZOOM ALANI: Sadece sahne içinde kalabilir, dışarı taşamaz */
+        /* Taşıyıcı konteyner */
         .pan-zoom-container {
             position: absolute;
             display: none;
             cursor: grab;
             transform-origin: center center;
             will-change: transform;
-            max-width: 100%;
-            max-height: 100%;
         }
         .pan-zoom-container:active { cursor: grabbing; }
         
-        /* KATALOG ÇERÇEVESİ: Taşmayı engelleyen kritik koruma kalkanı */
+        /* KATALOG ÇERÇEVESİ: Boyutları JS tarafından milimetrik yönetilir */
         .book {
             position: relative;
             display: flex;
             justify-content: center;
             align-items: center;
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
         }
         
-        /* SAYFA YAPISI: Ekrana ve en-boy oranına tam uyum */
+        /* SAYFA YAPISI */
         .page {
-            position: relative;
-            display: none;
-            max-width: 100%;
-            max-height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             opacity: 0;
-            transition: opacity 0.25s ease-in-out;
+            display: none;
         }
         
-        /* Aktif olan sayfa CSS sınırlarına göre ekrana cuk oturur */
         .page.active-page {
             display: block;
             opacity: 1;
         }
 
-        /* Canvas artık kendi kafasına göre büyüyemez, dış kutuya uymak zorunda */
         canvas {
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
-            object-fit: contain; /* Görsel bozulmayı engeller */
-            background: #fff;
+            width: 100% !important;
+            height: 100% !important;
             display: block;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            background: #fff;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.7);
             border-radius: 6px;
         }
         
@@ -123,7 +111,7 @@
         <button id="zoomInBtn">🔍 +</button>
         <button id="zoomOutBtn">🔍 -</button>
     </div>
-    <div class="hint">Tip: You can make stable transitions using the arrow keys or by clicking. You can zoom in and out of the page.</div>
+    <div class="hint">EYou can make stable transitions using the arrow keys. You can zoom in and out of the page.</div>
 
     <script>
         const pdfUrl = 'Enza Home Collections.pdf'; 
@@ -142,18 +130,33 @@
         const book = document.getElementById('book');
         const scene = document.getElementById('scene');
 
+        // Sayfa Değiştiğinde Boyutları Ekrana Göre Yeniden Hesaplayan Hayati Fonksiyon
+        function resizeBookToFit(viewport) {
+            const sceneW = scene.clientWidth;
+            const sceneH = scene.clientHeight;
+
+            // Sayfayı ekrana taşırmadan sığdıracak en büyük çarpanı buluyoruz
+            const scaleX = sceneW / viewport.width;
+            const scaleY = sceneH / viewport.height;
+            const idealScale = Math.min(scaleX, scaleY);
+
+            // Üst üste binme veya sol üste kaçma hatasını çözen net piksel ataması
+            const finalWidth = viewport.width * idealScale;
+            const finalHeight = viewport.height * idealScale;
+
+            book.style.width = Math.floor(finalWidth) + 'px';
+            book.style.height = Math.floor(finalHeight) + 'px';
+        }
+
         async function renderPage(pageNum, totalPages) {
             try {
                 const page = await pdfDoc.getPage(pageNum);
                 
-                // Netlik için yüksek çözünürlük ölçeği (Fakat CSS ile sınırlandırılacak)
+                // Netlik kalitesi için PDF'i yüksek çözünürlük katsayısıyla (2.0) hafızaya alıyoruz
                 const viewport = page.getViewport({ scale: 2.0 });
 
                 const pageDiv = document.createElement('div');
                 pageDiv.className = 'page';
-                
-                // Sayfanın orijinal en-boy oranını CSS'e zorla dikte ediyoruz (Taşmayı çözen anahtar)
-                pageDiv.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
                 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
@@ -163,9 +166,14 @@
                 pageDiv.appendChild(canvas);
                 book.appendChild(pageDiv);
 
-                await page.render({ canvasContext: context, viewport: viewport }).promise;
+                // Sayfayı render etmesi için PDF.js motoruna gönderiyoruz
+                const renderTask = page.render({ canvasContext: context, viewport: viewport });
                 
+                // Gelecekte boyutlandırma yapabilmek için viewport verisini elemente bağlıyoruz
+                pageDiv.pdfViewport = page.getViewport({ scale: 1.0 }); 
                 pages[pageNum - 1] = pageDiv;
+
+                await renderTask.promise;
                 updateBookDisplay();
             } catch (err) { console.error(err); }
         }
@@ -176,7 +184,7 @@
                 const totalPages = pdfDoc.numPages;
                 pages = new Array(totalPages);
 
-                // İlk 3 sayfayı hemen yükle
+                // İlk 3 sayfayı jet hızıyla yükle
                 const firstBatch = Math.min(3, totalPages);
                 for (let pageNum = 1; pageNum <= firstBatch; pageNum++) {
                     await renderPage(pageNum, totalPages);
@@ -186,7 +194,7 @@
                 zoomContainer.style.display = 'block';
                 updateBookDisplay();
 
-                // Diğerleri arkadan sessizce akar
+                // Kalan sayfalar arkadan sessizce beslenir
                 if (totalPages > 3) {
                     for (let pageNum = 4; pageNum <= totalPages; pageNum++) {
                         renderPage(pageNum, totalPages);
@@ -195,6 +203,7 @@
             } catch (error) { console.error(error); }
         }
 
+        // JS Güdümlü Gösterim Motoru
         function updateBookDisplay() {
             const total = pages.length;
             if (total === 0) return;
@@ -203,6 +212,8 @@
                 if (!page) return;
                 if (index === currentId) {
                     page.classList.add('active-page');
+                    // CSS hesaplamasına güvenmiyoruz, JS ile piksel mühürlemesi yapıyoruz:
+                    resizeBookToFit(page.pdfViewport);
                 } else {
                     page.classList.remove('active-page');
                 }
@@ -214,7 +225,7 @@
         }
 
         function flipNext() {
-            if (currentId < pages.length - 1) {
+            if (currentId < pages.length - 1 && pages[currentId + 1]) {
                 currentId++;
                 resetZoom();
                 updateBookDisplay();
@@ -222,7 +233,7 @@
         }
 
         function flipPrev() {
-            if (currentId > 0) {
+            if (currentId > 0 && pages[currentId - 1]) {
                 currentId--;
                 resetZoom();
                 updateBookDisplay();
@@ -238,11 +249,11 @@
             zoomContainer.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
         }
 
-        // Zoom & Drag Kontrolleri
+        // Pürüzsüz Zoom ve Pan (Sürükleme) Kontrolleri
         scene.addEventListener('wheel', (e) => {
             e.preventDefault();
-            if (e.deltaY < 0) { scale = Math.min(scale + 0.15, 5); } 
-            else { scale = Math.max(scale - 0.15, 1); }
+            if (e.deltaY < 0) { scale = Math.min(scale + 0.2, 5); } 
+            else { scale = Math.max(scale - 0.2, 1); }
             if (scale === 1) { posX = 0; posY = 0; }
             updateTransform();
         });
@@ -271,6 +282,11 @@
         window.addEventListener('keydown', (e) => {
             if (e.key === "ArrowRight" || e.key === " ") flipNext();
             if (e.key === "ArrowLeft") flipPrev();
+        });
+
+        // Pencere boyutu değiştiğinde kataloğu koru
+        window.addEventListener('resize', () => {
+            if (pages[currentId]) updateBookDisplay();
         });
 
         window.onload = initPremiumBook;
