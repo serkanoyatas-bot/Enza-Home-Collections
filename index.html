@@ -50,7 +50,7 @@
             cursor: grab;
             transform-origin: center center;
             will-change: transform;
-            z-index: 10; /* Okların arkasında kalması için optimize edildi */
+            z-index: 10;
         }
         .pan-zoom-container:active { cursor: grabbing; }
         
@@ -88,13 +88,13 @@
             box-shadow: 0 20px 40px rgba(0,0,0,0.9);
         }
 
-        /* YENİ NESİL PREMIUM GEÇİŞ OKLARI (HAYALET BUTONLAR) */
+        /* YENİ NESİL GEÇİŞ OKLARI (SÜREKLİ GÖRÜNÜR & ŞIK SİYAH/BEYAZ KONTRAST) */
         .nav-overlay-zone {
             position: absolute;
             top: 0;
             height: 100%;
-            width: 150px; /* Fare kenara bu kadar yaklaşınca ok tetiklenir */
-            z-index: 9999 !important; /* Zoom alanının tamamen önüne geçirdik */
+            width: 120px; /* Okların etrafındaki konforlu algılama alanı */
+            z-index: 9999 !important;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -102,42 +102,43 @@
         .nav-overlay-zone.left-zone { left: 0; }
         .nav-overlay-zone.right-zone { right: 0; }
 
-        /* Gerçek Ok Gövdesi */
+        /* Gerçek Ok Gövdesi - Artık Sürekli Görünür */
         .arrow-btn {
             width: 55px;
             height: 55px;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.45); /* Siyah transparan arka plan */
+            border: 1px solid rgba(255, 255, 255, 0.25); /* Beyaz ince çerçeve boundary */
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
+            color: rgba(255, 255, 255, 0.85); /* Net beyaz ok işareti */
             font-size: 22px;
             cursor: pointer;
-            opacity: 0; /* Normalde tamamen gizli */
-            transition: all 0.3s ease-in-out;
+            opacity: 0.35; /* Tamamen yok olmak yerine her an belli olan şık bir hayalet görünüm */
+            transition: all 0.25s ease-in-out;
             backdrop-filter: blur(5px);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
             user-select: none;
         }
 
-        /* Fare kenar bölgeye girince ok görünür ve imleç tıklama eline döner */
+        /* Kullanıcı o bölgeye yaklaştığında ok hafifçe canlanır */
         .nav-overlay-zone:hover {
             cursor: pointer;
         }
         .nav-overlay-zone:hover .arrow-btn {
-            opacity: 1;
-            background: rgba(0, 0, 0, 0.75);
-            border-color: rgba(255, 255, 255, 0.5);
+            opacity: 0.75;
+            background: rgba(0, 0, 0, 0.65);
         }
         
-        /* Okun üzerine tam gelindiğinde parlasın */
+        /* Tam okun üzerine gelindiğinde tam parlar ve öne çıkar */
         .arrow-btn:hover {
+            opacity: 1 !important;
             transform: scale(1.1);
-            background: #fff !important;
-            color: #000;
-            box-shadow: 0 0 15px rgba(255,255,255,0.6);
+            background: #ffffff !important;
+            color: #000000 !important; /* Premium ters yüz kontrastı */
+            box-shadow: 0 0 20px rgba(255,255,255,0.7);
+            border-color: #fff;
         }
         
         /* SAĞ PANEL: POWERPOINT SLAYT ŞERİDİ */
@@ -178,7 +179,7 @@
         
         .thumb-box canvas {
             width: 100% !important;
-            height: auto !important; /* Yükseklik baskısı kaldırıldı, büzüşme bitti */
+            height: auto !important;
             display: block;
             box-shadow: none;
             border-radius: 0;
@@ -472,9 +473,8 @@
             zoomContainer.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
         }
 
-        // BAĞIMSIZ HALE GETİRİLEN VE KATMAN ÇAKIŞMASI ÇÖZÜLEN OK TETİKLEYİCİLERİ
         document.getElementById('zoneLeft').addEventListener('click', (e) => {
-            if (scale > 1) return; // Zoom durumunda pan yapılabilsin diye okları engelle
+            if (scale > 1) return; 
             e.stopPropagation();
             flipPrev();
         });
@@ -508,7 +508,6 @@
         });
 
         scene.addEventListener('mousedown', (e) => {
-            // Sadece orta alanda veya yakınlaşınca drag (sürükleme) aktif olsun, ok bölgelerinde tıklamayı kesmesin
             if (scale === 1 || e.target.closest('.nav-overlay-zone')) return;
             isDragging = true;
             startX = e.clientX - posX;
