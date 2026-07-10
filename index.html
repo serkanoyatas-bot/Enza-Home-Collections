@@ -3,138 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hızlı 16:9 PDF Flipbook (İlk 5 Sayfa Öncelikli)</title>
+    <title>Enza Home Collections - İnteraktif Katalog</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
     <style>
+        * { box-sizing: border-box; }
         body {
             margin: 0; padding: 0;
-            background-color: #1a1a1a;
+            background: radial-gradient(circle, #2c2c2c 0%, #111111 100%);
             display: flex; flex-direction: column;
             justify-content: center; align-items: center;
-            height: 100vh; font-family: sans-serif;
+            height: 100vh; font-family: 'Helvetica Neue', Arial, sans-serif;
             overflow: hidden;
             perspective: 2000px;
+            color: #fff;
         }
         
         #loading { 
-            color: #fff; font-size: 16px; font-weight: bold; margin-bottom: 20px; 
+            font-size: 18px; font-weight: 300; letter-spacing: 1px; margin-bottom: 20px;
+            animation: pulse 1.5s infinite ease-in-out;
         }
         
-        .book {
+        /* Kitap Sahnesi ve Yakınlaştırma Alanı */
+        .scene {
             position: relative;
-            width: 880px;  
-            height: 495px; 
+            width: 90vw;
+            height: 75vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden; /* Zoom yapıldığında dışarı taşanları gizler */
+            border-radius: 8px;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.6);
+        }
+
+        /* Taşıyıcı Alan (Zoom ve Kaydırma bu div'e uygulanır) */
+        .pan-zoom-container {
+            position: absolute;
             display: none;
             transform-style: preserve-3d;
-            transition: transform 0.5s;
+            cursor: grab;
+            transition: transform 0.1s ease-out;
         }
+        .pan-zoom-container:active { cursor: grabbing; }
         
+        /* Her Bir Sunum Sayfası */
         .page {
             position: absolute;
-            width: 100%; height: 100%;
-            top: 0; left: 0;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
             transform-origin: left center;
             transform-style: preserve-3d;
             transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
-            cursor: pointer;
             backface-visibility: hidden;
         }
         
         canvas {
             width: 100%; height: 100%;
             background: white;
-            box-shadow: 4px 0 15px rgba(0,0,0,0.4);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 1px rgba(255,255,255,0.2);
             display: block;
             border-radius: 4px;
         }
 
+        /* 3D Çevrilme Efekti */
         .page.flipped {
-            transform: rotateY(-180deg);
+            transform: translate(-50%, -50%) rotateY(-180deg);
         }
         
-        .buttons { margin-top: 30px; z-index: 10; }
+        /* Modern Kontrol Paneli */
+        .controls {
+            margin-top: 25px; display: flex; align-items: center; gap: 15px; z-index: 10;
+            background: rgba(0,0,0,0.4); padding: 10px 25px; border-radius: 50px;
+            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
+        }
+        
         button {
-            padding: 12px 25px; font-size: 14px; font-weight: bold; cursor: pointer;
-            background: #fff; border: none; border-radius: 5px; margin: 0 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            padding: 10px 20px; font-size: 14px; font-weight: 500; cursor: pointer;
+            background: #fff; color: #111; border: none; border-radius: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: all 0.2s;
+        }
+        button:hover { background: #e5e5e5; transform: translateY(-1px); }
+        
+        #pageIndicator { font-size: 14px; font-weight: 400; min-width: 60px; text-align: center; }
+        .hint { font-size: 11px; color: #888; margin-top: 8px; }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; }
         }
     </style>
 </head>
 <body>
 
     <div id="loading">It's loading.. Please wait..</div>
-    <div id="book" class="book"></div>
-
-    <div class="buttons">
-        <button id="prevBtn">◀ Previous</button>
-        <button id="nextBtn">Next ▶</button>
+    
+    <div class="scene" id="scene">
+        <div id="zoomContainer" class="pan-zoom-container"></div>
     </div>
 
+    <div class="controls">
+        <button id="prevBtn">◀ Previous</button>
+        <span id="pageIndicator">0 / 0</span>
+        <button id="nextBtn">Next ▶</button>
+        <button id="zoomInBtn">🔍 +</button>
+        <button id="zoomOutBtn">🔍 -</button>
+    </div>
+    <div class="hint">Tip: You can turn pages by clicking or using the arrow keys. You can zoom by dragging the mouse cursor.</div>
+
     <script>
+        // Dosya adı birebir eşleşmeli
         const pdfUrl = 'Enza Home Collections.pdf'; 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
         let currentId = 0;
         let pages = [];
         let pdfDoc = null;
+        
+        // Zoom ve Kaydırma Değişkenleri
+        let scale = 1;
+        let posX = 0, posY = 0;
+        let isDragging = false;
+        let startX, startY;
 
-        // Belirli bir sayfayı render eden çekirdek fonksiyon
-        async function renderPage(pageNum, totalPages, bookContainer) {
+        const zoomContainer = document.getElementById('zoomContainer');
+        const scene = document.getElementById('scene');
+
+        // Sayfa Boyutlandırma ve Çizim Motoru (Dinamik En-Boy)
+        async function renderPage(pageNum, totalPages) {
             try {
                 const page = await pdfDoc.getPage(pageNum);
                 
                 const pageDiv = document.createElement('div');
                 pageDiv.className = 'page';
                 pageDiv.style.zIndex = totalPages - pageNum; 
+
+                // PDF'in orijinal boyutunu alıyoruz (A4 veya 16:9 otomatik ayrışır)
+                const baseViewport = page.getViewport({ scale: 1 });
+                
+                // Sahne yüksekliğine göre akıllıca ölçekle (Yazıların okunması için ideal)
+                const targetScale = (scene.clientHeight * 0.9) / baseViewport.height;
+                const viewport = page.getViewport({ scale: targetScale * 1.5 }); // Netlik için 1.5 katı canvas kalitesi
+
+                // Div boyutlarını sayfanın orijinal oranına göre set ediyoruz (Ezilmeyi çözer)
+                pageDiv.style.width = (viewport.width / 1.5) + 'px';
+                pageDiv.style.height = (viewport.height / 1.5) + 'px';
                 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
-                
-                const viewport = page.getViewport({ scale: 1.8 });
                 canvas.height = viewport.height;
                 canvas.width = viewport.width;
 
                 pageDiv.appendChild(canvas);
-                bookContainer.appendChild(pageDiv);
+                zoomContainer.appendChild(pageDiv);
 
                 await page.render({ canvasContext: context, viewport: viewport }).promise;
                 
                 const index = pageNum - 1;
-                pageDiv.addEventListener('click', () => {
+                pageDiv.addEventListener('click', (e) => {
+                    // Zoom modundayken tıklamayla sayfa dönmesini engellemek için kontrol
+                    if (scale > 1.1) return;
                     if (index === currentId) { flipNext(); } 
                     else if (index === currentId - 1) { flipPrev(); }
                 });
 
                 pages[index] = pageDiv;
+                updateIndicator();
             } catch (err) {
-                console.error("Sayfa render hatası: " + pageNum, err);
+                console.error(err);
             }
         }
 
-        async function initPrioritizedBook() {
+        async function initPremiumBook() {
             try {
                 pdfDoc = await pdfjsLib.getDocument(pdfUrl).promise;
                 const totalPages = pdfDoc.numPages;
-                const book = document.getElementById('book');
 
                 pages = new Array(totalPages);
 
-                // 1. ADIM: İlk 5 sayfayı (veya PDF daha kısaysa toplam sayfa kadarını) sırayla ve zorunlu yükle
-                const priorityLimit = Math.min(5, totalPages);
-                for (let pageNum = 1; pageNum <= priorityLimit; pageNum++) {
-                    await renderPage(pageNum, totalPages, book);
+                // KURAL: İlk 3 sayfayı öncelikli olarak hemen çiz ve ekrana ver
+                const firstBatch = Math.min(3, totalPages);
+                for (let pageNum = 1; pageNum <= firstBatch; pageNum++) {
+                    await renderPage(pageNum, totalPages);
                 }
 
-                // İlk 5 sayfa biter bitmez sunumu hemen aç, bekleme ekranını kaldır
                 document.getElementById('loading').style.display = 'none';
-                book.style.display = 'block';
+                zoomContainer.style.display = 'block';
+                updateIndicator();
 
-                // 2. ADIM: Eğer sunum 5 sayfadan uzunsa, kalanları arka planda paralel yükle
-                if (totalPages > 5) {
-                    for (let pageNum = 6; pageNum <= totalPages; pageNum++) {
-                        renderPage(pageNum, totalPages, book); // await yok, arkada akacak
+                // GERİ KALANLAR: Arka planda sessizce paralel yüklenir
+                if (totalPages > 3) {
+                    for (let pageNum = 4; pageNum <= totalPages; pageNum++) {
+                        renderPage(pageNum, totalPages);
                     }
                 }
 
@@ -143,11 +203,13 @@
             }
         }
 
+        // Sayfa Çevirme Mantığı
         function flipNext() {
             if (currentId < pages.length && pages[currentId]) {
                 pages[currentId].classList.add('flipped');
                 pages[currentId].style.zIndex = currentId;
                 currentId++;
+                updateIndicator();
             }
         }
 
@@ -156,13 +218,58 @@
                 currentId--;
                 pages[currentId].classList.remove('flipped');
                 pages[currentId].style.zIndex = pages.length - currentId;
+                updateIndicator();
             }
         }
+
+        function updateIndicator() {
+            document.getElementById('pageIndicator').innerText = `${currentId + 1} / ${pages.length}`;
+        }
+
+        // Gelişmiş Zoom ve Pan (Sürükleme) Motoru
+        function updateTransform() {
+            zoomContainer.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
+        }
+
+        scene.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomSpeed = 0.1;
+            if (e.deltaY < 0) { scale = Math.min(scale + zoomSpeed, 4); } 
+            else { scale = Math.max(scale - zoomSpeed, 1); }
+            if (scale === 1) { posX = 0; posY = 0; } // Sıfırlandığında merkeze al
+            updateTransform();
+        });
+
+        scene.addEventListener('mousedown', (e) => {
+            if (scale === 1) return; // Zoom yoksa sürükleme yapma
+            isDragging = true;
+            startX = e.clientX - posX;
+            startY = e.clientY - posY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            posX = e.clientX - startX;
+            posY = e.clientY - startY;
+            updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        // Buton Zoom Kontrolleri
+        document.getElementById('zoomInBtn').addEventListener('click', () => { scale = Math.min(scale + 0.3, 4); updateTransform(); });
+        document.getElementById('zoomOutBtn').addEventListener('click', () => { scale = Math.max(scale - 0.3, 1); if(scale===1){posX=0;posY=0;} updateTransform(); });
 
         document.getElementById('nextBtn').addEventListener('click', flipNext);
         document.getElementById('prevBtn').addEventListener('click', flipPrev);
 
-        window.onload = initPrioritizedBook;
+        // Klavye Desteği
+        window.addEventListener('keydown', (e) => {
+            if (e.key === "ArrowRight") flipNext();
+            if (e.key === "ArrowLeft") flipPrev();
+        });
+
+        window.onload = initPremiumBook;
     </script>
 </body>
 </html>
