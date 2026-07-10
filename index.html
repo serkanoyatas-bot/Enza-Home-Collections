@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enza Home Collections - Perfect Fit Catalog</title>
+    <title>Enza Home Collections - Fixed Fit Viewer</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
@@ -21,64 +21,72 @@
         
         #loading { font-size: 16px; letter-spacing: 1px; margin-bottom: 20px; }
         
-        /* Ekran Sınırları - Sayfayı Bu Alana Sığdıracağız */
+        /* SAHNE: Ekran sınırlarını belirleyen ana kafes */
         .scene {
             position: relative;
             width: 90vw;
-            height: 75vh;
+            height: 72vh;
             display: flex;
             justify-content: center;
             align-items: center;
             overflow: hidden;
             border-radius: 8px;
-            box-shadow: inset 0 0 50px rgba(0,0,0,0.6);
         }
 
-        /* Zoom ve Kaydırma Alanı */
+        /* ZOOM ALANI: Sadece sahne içinde kalabilir, dışarı taşamaz */
         .pan-zoom-container {
             position: absolute;
             display: none;
             cursor: grab;
             transform-origin: center center;
             will-change: transform;
+            max-width: 100%;
+            max-height: 100%;
         }
         .pan-zoom-container:active { cursor: grabbing; }
         
-        /* KATALOG GÖVDESİ */
+        /* KATALOG ÇERÇEVESİ: Taşmayı engelleyen kritik koruma kalkanı */
         .book {
             position: relative;
             display: flex;
             justify-content: center;
             align-items: center;
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
         }
         
-        /* Her Bir Sayfa: Tam Sığan Tek Parça Yapı */
+        /* SAYFA YAPISI: Ekrana ve en-boy oranına tam uyum */
         .page {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            width: 100%; height: 100%;
+            position: relative;
+            display: none;
+            max-width: 100%;
+            max-height: 100%;
             opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s ease-in-out;
-            will-change: opacity;
+            transition: opacity 0.25s ease-in-out;
         }
         
-        /* Sadece O Anki Aktif Sayfa Görünür */
+        /* Aktif olan sayfa CSS sınırlarına göre ekrana cuk oturur */
         .page.active-page {
+            display: block;
             opacity: 1;
-            visibility: visible;
         }
 
+        /* Canvas artık kendi kafasına göre büyüyemez, dış kutuya uymak zorunda */
         canvas {
-            width: 100%; height: 100%;
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain; /* Görsel bozulmayı engeller */
             background: #fff;
             display: block;
             box-shadow: 0 20px 50px rgba(0,0,0,0.6);
             border-radius: 6px;
         }
         
-        /* Kontrol Butonları Paneli */
+        /* Kontrol Paneli */
         .controls {
             margin-top: 25px; display: flex; align-items: center; gap: 15px; 
             z-index: 99999;
@@ -109,19 +117,19 @@
     </div>
 
     <div class="controls">
-        <button id="prevBtn" disabled>◀ Previous</button>
+        <button id="prevBtn" disabled>◀ Önceki</button>
         <span id="pageIndicator">0 / 0</span>
-        <button id="nextBtn">Next ▶</button>
+        <button id="nextBtn">Sonraki ▶</button>
         <button id="zoomInBtn">🔍 +</button>
         <button id="zoomOutBtn">🔍 -</button>
     </div>
-    <div class="hint">You can make stable transitions using the arrow keys or by clicking. You can zoom in and out of the page.</div>
+    <div class="hint">Tip: You can make stable transitions using the arrow keys or by clicking. You can zoom in and out of the page.</div>
 
     <script>
         const pdfUrl = 'Enza Home Collections.pdf'; 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-        let currentId = 0; // 0, 1, 2, 3... diye ardışık gider
+        let currentId = 0; 
         let pages = [];
         let pdfDoc = null;
         
@@ -134,33 +142,18 @@
         const book = document.getElementById('book');
         const scene = document.getElementById('scene');
 
-        // Sayfayı Ekrana Akıllıca Sığdıran Fonksiyon (Auto-Fit)
         async function renderPage(pageNum, totalPages) {
             try {
                 const page = await pdfDoc.getPage(pageNum);
-                const baseViewport = page.getViewport({ scale: 1 });
                 
-                // Sahne sınırlarına göre en uygun sığma oranını (Fit) hesapla
-                const scaleX = (scene.clientWidth * 0.95) / baseViewport.width;
-                const scaleY = (scene.clientHeight * 0.95) / baseViewport.height;
-                const fitScale = Math.min(scaleX, scaleY); // Taşmayı önleyen altın oran
-
-                // Netlik kalitesi için canvas'ı yüksek çözünürlükte çizdiriyoruz
-                const viewport = page.getViewport({ scale: fitScale * 1.6 });
-
-                const pW = baseViewport.width * fitScale;
-                const pH = baseViewport.height * fitScale;
-
-                // İlk sayfada ana kapsayıcı boyutlarını kilitliyoruz
-                if (pageNum === 1) {
-                    book.style.width = pW + 'px';
-                    book.style.height = pH + 'px';
-                }
+                // Netlik için yüksek çözünürlük ölçeği (Fakat CSS ile sınırlandırılacak)
+                const viewport = page.getViewport({ scale: 2.0 });
 
                 const pageDiv = document.createElement('div');
                 pageDiv.className = 'page';
-                pageDiv.style.width = pW + 'px';
-                pageDiv.style.height = pH + 'px';
+                
+                // Sayfanın orijinal en-boy oranını CSS'e zorla dikte ediyoruz (Taşmayı çözen anahtar)
+                pageDiv.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
                 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
@@ -183,7 +176,7 @@
                 const totalPages = pdfDoc.numPages;
                 pages = new Array(totalPages);
 
-                // İlk 3 sayfayı hızla ekrana bas
+                // İlk 3 sayfayı hemen yükle
                 const firstBatch = Math.min(3, totalPages);
                 for (let pageNum = 1; pageNum <= firstBatch; pageNum++) {
                     await renderPage(pageNum, totalPages);
@@ -193,7 +186,7 @@
                 zoomContainer.style.display = 'block';
                 updateBookDisplay();
 
-                // Kalanlar arkadan pürüzsüzce beslenir
+                // Diğerleri arkadan sessizce akar
                 if (totalPages > 3) {
                     for (let pageNum = 4; pageNum <= totalPages; pageNum++) {
                         renderPage(pageNum, totalPages);
@@ -202,7 +195,6 @@
             } catch (error) { console.error(error); }
         }
 
-        // Net Ardışık Gösterim Düzeni
         function updateBookDisplay() {
             const total = pages.length;
             if (total === 0) return;
@@ -211,9 +203,6 @@
                 if (!page) return;
                 if (index === currentId) {
                     page.classList.add('active-page');
-                    // Dinamik genişlik ayarı (İlk dikey sayfa ile yatay iç sayfalar arası geçişi esnetir)
-                    book.style.width = page.style.width;
-                    book.style.height = page.style.height;
                 } else {
                     page.classList.remove('active-page');
                 }
@@ -249,10 +238,10 @@
             zoomContainer.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
         }
 
-        // Akıllı Zoom & Drag Motoru
+        // Zoom & Drag Kontrolleri
         scene.addEventListener('wheel', (e) => {
             e.preventDefault();
-            if (e.deltaY < 0) { scale = Math.min(scale + 0.15, 4); } 
+            if (e.deltaY < 0) { scale = Math.min(scale + 0.15, 5); } 
             else { scale = Math.max(scale - 0.15, 1); }
             if (scale === 1) { posX = 0; posY = 0; }
             updateTransform();
@@ -274,8 +263,8 @@
 
         window.addEventListener('mouseup', () => { isDragging = false; });
 
-        document.getElementById('zoomInBtn').addEventListener('click', () => { scale = Math.min(scale + 0.4, 4); updateTransform(); });
-        document.getElementById('zoomOutBtn').addEventListener('click', () => { scale = Math.max(scale - 0.4, 1); if(scale===1){posX=0;posY=0;} updateTransform(); });
+        document.getElementById('zoomInBtn').addEventListener('click', () => { scale = Math.min(scale + 0.5, 5); updateTransform(); });
+        document.getElementById('zoomOutBtn').addEventListener('click', () => { scale = Math.max(scale - 0.5, 1); if(scale===1){posX=0;posY=0;} updateTransform(); });
         document.getElementById('nextBtn').addEventListener('click', flipNext);
         document.getElementById('prevBtn').addEventListener('click', flipPrev);
 
